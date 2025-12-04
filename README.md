@@ -14,7 +14,7 @@
 
 | GPU | Model | Tokens/s | Precision | Engine |
 |------|--------|------------|------------|----------|
-| **RTX 3090 (24 GB)** | Llama 3.1 (8B) | **~82 t/s** | FP16 | vLLM |
+| **RTX 3090 (24 GB)** | Llama 3.1 (8B) | **~82 t/s** | INT4 | vLLM |
 
 
 
@@ -90,7 +90,7 @@ This study measures the inference throughput of Llama 3.1 (8B) using vLLM on an 
 
 ### 2.3 Model Parameters
 - Model: Llama 3.1 — 8B  
-- Precision: FP16  
+- Precision: INT4  
 - Maximum new tokens: 1024  
 - Sampling: temperature = 0 (deterministic)
 
