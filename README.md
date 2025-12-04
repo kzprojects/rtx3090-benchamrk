@@ -16,7 +16,7 @@
 |------|--------|------------|------------|----------|
 | **RTX 3090 (24 GB)** | Llama 3.1 (8B) | **~82 t/s** | FP16 | vLLM |
 
-> Even a 2020-era GPU like RTX 3090 can deliver fast, stable LLM inference with modern runtimes like vLLM.
+
 
 ---
 
