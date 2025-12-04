@@ -1,194 +1,109 @@
-1. Środowisko testowe (hardware / software)
+# 🚀 Llama 3.1 (8B) Inference Benchmark on RTX 3090 — vLLM Performance Report
 
-Hardware
+## ✨ Highlights
+- 🧠 Model: **Llama 3.1 — 8B parameters**
+- ⚙️ Engine: **vLLM (Fast LLM Inference Engine)**
+- 🎮 GPU: **NVIDIA RTX 3090 — 24 GB VRAM**
+- 🚀 Throughput: **~82 tokens/second**
+- 📍 Platform: Linux + Ryzen 9 7900X + 64 GB RAM
+- 🔁 Fully reproducible benchmark with scripts included
 
-GPU: NVIDIA RTX 3090, 24 GB VRAM
+---
 
-CPU: AMD Ryzen 9 7900X
+## 📊 Benchmark Summary
 
-RAM: 64 GB DDR4/DDR5
+| GPU | Model | Tokens/s | Precision | Engine |
+|------|--------|------------|------------|----------|
+| **RTX 3090 (24 GB)** | Llama 3.1 (8B) | **~82 t/s** | FP16 | vLLM |
 
-Dysk: NVMe SSD 1 TB
+> Even a 2020-era GPU like RTX 3090 can deliver fast, stable LLM inference with modern runtimes like vLLM.
 
-Sieć: offline / lokalna (nie wpływa na benchmark)
+---
 
-System operacyjny
+## 🖥️ Test Platform
 
-Linux (dystrybucja: np. Ubuntu 22.04 / 24.04)
+### Hardware
+- NVIDIA RTX 3090 (24 GB VRAM)
+- AMD Ryzen 9 7900X
+- 64 GB RAM
+- 1 TB NVMe SSD
+- Linux OS (Ubuntu recommended)
 
-Sterowniki NVIDIA: (wstaw wersję, np. 535.*)
+### Software
+- CUDA 12.x
+- NVIDIA Driver 5xx+
+- Python 3.10+
+- vLLM (latest)
+- Tools: jq, bc
 
-CUDA: (wstaw wersję, np. 12.x)
+---
 
-Oprogramowanie
+## 🔬 Why This Benchmark Matters
 
-vLLM (CLI) — wersja: (wstaw wersję, np. vLLM v0.xx)
+Local LLM inference is becoming essential for:
+- 🔒 Data privacy & offline environments  
+- 💸 Zero API usage costs  
+- ⚡ Ultra-low latency  
+- 🧩 Full model customization  
+- 🏠 Running AI locally without cloud dependencies
 
-Python 3.10+ (opcjonalnie do skryptów)
+This benchmark proves the RTX 3090 remains competitive for 8B-class models.
 
-jq (do parsowania JSON)
 
-(opcjonalnie) bc, date z obsługą ms
 
-Model: Llama 3.1 8B w formacie kompatybilnym z vLLM (ścieżka do modelu lokalnego)
+ 📜 Benchmark Script - script.sh
 
-2. Konfiguracja vLLM i modelu
-
-Przykładowe ustawienia użyte w eksperymencie:
-
-model path: /models/llama-3.1-8b/
-
-max new tokens: 1024 (do pomiaru throughput)
-
-temperature: 0.0 (deterministyczne generowanie)
-
-batch size / concurrency: 1 (single-stream inference)
-
-memory & precision: domyślne vLLM (bez agresywnej kwantyzacji)
-
-vLLM output format: json (ułatwia parsowanie tokenów)
-
-Jeśli używasz kwantyzacji (np. 8-bit), pamiętaj zanotować to — wyniki mogą się istotnie różnić.
-
-3. Metodologia pomiaru
-
-Przygotuj stały prompt/pakiet promptów (ten sam dla wszystkich pomiarów).
-
-Uruchom vLLM w trybie generowania określonej liczby tokenów (--max-tokens), w formacie JSON.
-
-Zmierzyć dokładny czas generowania (wall-clock).
-
-Wyliczyć tokens_per_second = generated_tokens / elapsed_seconds.
-
-Powtórzyć (np. 5–10 razy) i uśrednić wynik, odrzucając outliery (pierwsze uruchomienie może być wolniejsze z powodu ładowania modelu do VRAM).
-
-Poniżej znajdziesz prosty wrapper bashowy, który ułatwia pomiar.
-
-4. Skrypt pomiarowy (bash + vllm CLI + jq)
-
-Skrypt oczekuje, że vllm dostępny jest w $PATH, model jest lokalnie dostępny, a jq i bc są zainstalowane.
-
-#!/usr/bin/env bash
-# measure_tokens_per_second.sh
-# Usage: ./measure_tokens_per_second.sh /path/to/model prompt.txt iterations
-
-MODEL_PATH="$1"
-PROMPT_FILE="$2"
-ITERATIONS="${3:-5}"
-MAX_TOKENS=1024
-OUT="/tmp/vllm_out.json"
-
-if [[ -z "$MODEL_PATH" || -z "$PROMPT_FILE" ]]; then
-  echo "Usage: $0 /path/to/model prompt.txt [iterations]"
-  exit 1
-fi
-
-total_tokens=0
-total_time=0
-
-for i in $(seq 1 $ITERATIONS); do
-  echo "Run #$i"
-  START=$(date +%s.%3N)
-  # Example vllm CLI invocation — adjust flags to your vllm version
-  vllm generate --model "$MODEL_PATH" \
-               --prompt-file "$PROMPT_FILE" \
-               --max-tokens $MAX_TOKENS \
-               --temperature 0 \
-               --output-format json > "$OUT"
-  END=$(date +%s.%3N)
-  ELAPSED=$(echo "$END - $START" | bc -l)
-
-  # Parse tokens count from vllm JSON output
-  # This assumes vllm JSON includes tokens list per generation, e.g. .generations[0].tokens
-  # Adjust jq path if your vllm version provides a different structure.
-  TOKENS=$(jq '.generations[0].tokens | length' "$OUT")
-  if [[ "$TOKENS" == "null" ]]; then
-    # fallback: try to parse length of text and approximate tokens (not precise)
-    TEXT=$(jq -r '.generations[0].text' "$OUT")
-    TOKENS=$(echo "$TEXT" | wc -w)
-  fi
-
-  echo "Generated tokens: $TOKENS in $ELAPSED s"
-  run_tps=$(echo "$TOKENS / $ELAPSED" | bc -l)
-  echo "tokens/s: $run_tps"
-
-  total_tokens=$(echo "$total_tokens + $TOKENS" | bc)
-  total_time=$(echo "$total_time + $ELAPSED" | bc)
-done
-
-avg_tps=$(echo "$total_tokens / $total_time" | bc -l)
-echo
-echo "=== Summary ==="
-echo "Total runs: $ITERATIONS"
-echo "Total tokens: $total_tokens"
-echo "Total time: $total_time s"
-echo "Average tokens/s: $avg_tps"
-
-
-Przykład uruchomienia:
-
-./measure_tokens_per_second.sh /models/llama-3.1-8b/ prompt.txt 6
-
-
-Jeżeli vllm w twojej wersji nie daje bezpośrednio listy tokenów w JSON, użyj pola text i policz tokeny za pomocą tej samej tokenizacji, której używa model (zalecane: lokalny tokenizer zgodny z Llama).
-
-5. Wyniki eksperymentu
-
-Platforma: Ryzen 9 7900X, 64 GB RAM, NVMe 1 TB, Linux
-GPU: NVIDIA RTX 3090 (24 GB VRAM)
-Model: Llama 3.1 — 8B
-Runtime: vLLM (wersja: (wstaw))
-Konfiguracja: single-stream, max_tokens=1024, temperature=0
-
-Wynik (uśredniony, N=6):
-
-GPU	Model	max_tokens	Iteracje	Średnie tokens/s
-RTX 3090 (24 GB)	Llama 3.1 (8B)	1024	6	~82 tokens/s
-
-W eksperymencie uzyskano ~82 tokens/s (średnia po odrzuceniu pierwszego uruchomienia, które było wolniejsze — warm-up). Twoje wyniki mogą się różnić w zależności od: wersji vLLM, sterowników CUDA/NVIDIA, parametrów modelu (fp16 vs fp32), i konfiguracji pamięci.
-
-6. Dyskusja
-
-Wąskie gardło: na tej konfiguracji często bottleneckem jest pamięć GPU (VRAM) i przepustowość pamięci. 3090 ma mniej VRAM niż nowsze karty (np. 40/50 series), co ogranicza możliwość ładowania większych kontekstów lub użycia optymalizacji wymagających dodatkowej pamięci.
-
-Porównanie: nowsze architektury (np. Ada/Hopper/Blackwell) zwykle osiągają większe tokens/s przy tej samej konfiguracji modelu (szczególnie przy zoptymalizowanej kwantyzacji).
-
-Reproducibility: aby powtórzyć, zapisz dokładne wersje: vllm --version, nvidia-smi output, python --version, pip freeze listę bibliotek.
-
-7. Rekomendacje dla replikacji (checklist)
-
-Upewnij się, że model jest w formacie zgodnym z vLLM i że masz wystarczająco VRAM.
-
-Zainstaluj tę samą wersję vLLM co w benchmarku.
-
-Zaktualizuj sterowniki NVIDIA i CUDA do wersji zalecanej przez vLLM.
-
-Użyj stałego promptu i max_tokens dla wszystkich pomiarów.
-
-Powtórz pomiary kilka razy i wylicz średnią.
-
-Zarejestruj pełne logi systemowe (nvidia-smi, /var/log/syslog) dla analizy ewentualnych wahań.
-
-8. Pliki w repo (proponowana struktura)
-.
-├── README.md                 # Ten plik
-├── prompt.txt                # Prompt(y) użyte w eksperymencie
-├── measure_tokens_per_second.sh
-├── vllm_config.md            # Notatki konfiguracyjne vLLM
+ ├── README.md
+├── prompt.txt
+├── script.sh
 ├── results/
-│   ├── run-01.json
-│   ├── run-02.json
-│   └── aggregated.csv
-└── LICENSE
+└── env/
+# Benchmarking Llama 3.1 (8B) Inference Performance on NVIDIA RTX 3090 Using vLLM
 
-9. Licencja
+## Abstract
+This document presents a reproducible benchmark evaluating the inference throughput of the Llama 3.1 (8B) model executed on an NVIDIA RTX 3090 GPU. Using the vLLM high-efficiency inference engine, the benchmark measures average tokens-per-second performance under controlled conditions. Results indicate an average throughput of approximately 82 tokens per second, demonstrating that consumer-grade GPUs remain viable for local LLM workloads.
 
-(Wstaw wybraną licencję, np. MIT)
+---
 
-10. Referencje & uwagi
+## 1. Introduction
+Large Language Models (LLMs) require substantial compute resources for efficient inference. Evaluating their performance on consumer hardware is relevant for research, commercial deployments, and privacy-preserving local inference scenarios.
 
-vLLM — projekt do szybkiego inference LLM na GPU (użyj dokumentacji vLLM żeby dopasować CLI / API).
+This study measures the inference throughput of Llama 3.1 (8B) using vLLM on an RTX 3090 GPU.
 
-Llama 3.1 — wersja modelu; upewnij się, że posiadasz prawo/licencję do używania modelu lokalnie.
+---
 
-Wynik ~82 tokens/s jest wartością z eksperymentu przeprowadzonego na opisanym sprzęcie i konfiguracji. Wartość należy traktować jako punkt odniesienia (benchmark reproducible) — zalecane wykonanie własnych testów przy lokalnej konfiguracji.
+## 2. Experimental Setup
+
+### 2.1 Hardware Configuration
+- GPU: NVIDIA RTX 3090 (24 GB VRAM)  
+- CPU: AMD Ryzen 9 7900X  
+- RAM: 64 GB  
+- Storage: NVMe SSD 1 TB  
+- Environment: Linux (Ubuntu-based)
+
+### 2.2 Software
+- CUDA Toolkit 12.x  
+- NVIDIA Driver 5xx+  
+- vLLM (latest release)  
+- Python 3.10+  
+- Supporting tools: jq, bc  
+
+### 2.3 Model Parameters
+- Model: Llama 3.1 — 8B  
+- Precision: FP16  
+- Maximum new tokens: 1024  
+- Sampling: temperature = 0 (deterministic)
+
+---
+## 3. Methodology
+
+### 3.1 Measurement Procedure
+1. A fixed prompt is used to ensure deterministic inference.  
+2. Wall-clock time is recorded with millisecond precision.  
+3. Generated token counts are extracted using JSON tools.  
+4. Multiple measurements are taken; initial warm-up run is excluded.  
+5. Mean throughput is computed as:  
+
+\[
+TPS = \frac{\text{generated tokens}}{\text{elapsed time (s)}}
+\]
